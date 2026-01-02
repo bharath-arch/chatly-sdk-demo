@@ -1,0 +1,18 @@
+{
+  "name": "chatly-server",
+  "version": "1.0.0",
+  "description": "WebSocket server for chatly-sdk chat application",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "chatly-sdk": "^0.0.8",
+    "mongoose": "^9.1.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
