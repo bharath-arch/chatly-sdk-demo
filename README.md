@@ -1,6 +1,6 @@
 # 💬 Chatly - Real-time Chat Application
 
-A production-ready, fully functional real-time chat application built with **chatly-sdk@0.0.8-beta**, React, TypeScript, and WebSocket.
+A production-ready, fully functional real-time chat application built with **chatly-sdk@2.0.0**, React, TypeScript, and WebSocket.
 
 ## ✨ Features
 
