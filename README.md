@@ -7,13 +7,10 @@ A production-ready, fully functional real-time chat application built with **cha
 - ✅ User creation and authentication
 - ✅ 1-to-1 real-time messaging
 - ✅ End-to-end encrypted messages
-- ✅ Message persistence (LocalStorage)
 - ✅ Auto-reconnection support
-- ✅ Typing indicators
 - ✅ Message timestamps
 - ✅ Online/offline status
 - ✅ Message delivery status
-- ✅ Premium dark-mode UI with glassmorphism
 
 ## 🚀 Quick Start
 
