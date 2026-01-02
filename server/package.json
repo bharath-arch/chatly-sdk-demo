@@ -8,7 +8,7 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
-    "chatly-sdk": "^0.0.8",
+    "chatly-sdk": "2.0.0",
     "mongoose": "^9.1.1",
     "ws": "^8.18.0"
   },

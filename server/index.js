@@ -1,12 +1,16 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import mongoose from 'mongoose';
-import { 
-  ChatSDK, 
+import {
+  ChatSDK,
   ChatSession,
   InMemoryGroupStore,
   validateUsername,
-  validateUserId
+  validateUserId,
+  LocalStorageProvider,
+  logger
 } from 'chatly-sdk';
+
+logger.setLevel(0); // Set to DEBUG level
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/chatly';
@@ -26,9 +30,9 @@ mongoose.connect(MONGODB_URI)
 const userSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   username: { type: String, required: true },
-  publicKey: { type: Object, required: true },
-  identityKey: { type: Object },
-  privateKey: { type: Object },
+  publicKey: { type: String, required: true },
+  identityKey: { type: String },
+  privateKey: { type: String },
   lastSeen: { type: Date, default: Date.now },
   status: { type: String, default: 'offline' }
 });
@@ -84,6 +88,9 @@ class MongoDBMessageStore {
       throw err;
     }
   }
+  async findById(id) {
+    return await MessageModel.findOne({ id });
+  }
   async listByUser(userId) {
     return await MessageModel.find({
       $or: [{ senderId: userId }, { receiverId: userId }]
@@ -92,14 +99,19 @@ class MongoDBMessageStore {
   async listByGroup(groupId) {
     return await MessageModel.find({ groupId }).sort({ timestamp: 1 });
   }
+  async delete(id) {
+    await MessageModel.deleteOne({ id });
+  }
 }
 
-// --- Initialize ChatSDK ---
+// --- Initialize Local Storage ---
+const storageProvider = new LocalStorageProvider('./uploads');
 
 const sdk = new ChatSDK({
   userStore: new MongoDBUserStore(),
   messageStore: new MongoDBMessageStore(),
   groupStore: new InMemoryGroupStore(),
+  storageProvider: storageProvider,
   transport: { 
     connect: async () => {}, 
     disconnect: async () => {},
@@ -229,7 +241,7 @@ async function startServer() {
             throw new Error('Sender or recipient not found');
           }
 
-          const chatSession = new ChatSession(session.id, sender, recipient);
+          const chatSession = new ChatSession(session.id, sender, recipient, sdk.config.storageProvider);
           
           // Encrypt media message manually on server
           const msg = await chatSession.encryptMedia(caption || '', {
@@ -288,7 +300,7 @@ async function startServer() {
           // Decrypt messages sequentially for the client to avoid state corruption
           for (const msg of history) {
             try {
-              const chatSession = new ChatSession(sessionId, senderObj, recipientObj);
+              const chatSession = new ChatSession(sessionId, senderObj, recipientObj, sdk.config.storageProvider);
               await chatSession.initialize(); 
 
               if (msg.type === 'media') {
@@ -328,6 +340,42 @@ async function startServer() {
         const recipientWs = clients.get(receiverId);
         if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
           recipientWs.send(JSON.stringify({ type: 'typing', senderId: userId, isTyping }));
+        }
+        return;
+      }
+
+      // Delete message
+      if (message.type === 'delete_message') {
+        const { messageId } = message;
+        console.log(`🗑️ Deleting message: ${messageId}`);
+        try {
+          const msg = await sdk.config.messageStore.findById(messageId);
+          if (!msg) {
+            throw new Error('Message not found');
+          }
+
+          // If the message has media, delete from storage
+          if (msg.media && msg.media.storageKey) {
+            console.log(`📦 Deleting storage file: ${msg.media.storageKey}`);
+            await sdk.config.storageProvider.delete(msg.media.storageKey);
+          }
+
+          // Delete from store
+          await sdk.config.messageStore.delete(messageId);
+
+          // Notify participants
+          const participants = [msg.senderId];
+          if (msg.receiverId) participants.push(msg.receiverId);
+          
+          participants.forEach(pid => {
+            const pWs = clients.get(pid);
+            if (pWs && pWs.readyState === WebSocket.OPEN) {
+              pWs.send(JSON.stringify({ type: 'message_deleted', messageId }));
+            }
+          });
+        } catch (err) {
+          console.error('❌ Delete error:', err.message);
+          ws.send(JSON.stringify({ type: 'error', message: err.message }));
         }
         return;
       }
