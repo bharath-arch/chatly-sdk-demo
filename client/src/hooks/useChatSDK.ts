@@ -15,9 +15,10 @@ export interface Message {
   groupId?: string;
   ciphertext: string;
   iv: string;
-  type: string;
+  type: 'text' | 'media';
   timestamp: number;
   text?: string;
+  media?: any;
   status?: 'sent' | 'delivered' | 'pending';
 }
 
@@ -233,6 +234,36 @@ export function useChatSDK() {
     }));
   }, [state.activeSession]);
 
+  // Send Media Message
+  const sendMedia = useCallback(async (file: File, caption: string = '') => {
+    if (!state.activeSession || !socketRef.current) return;
+
+    return new Promise<void>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Data = reader.result as string;
+        
+        socketRef.current?.send(JSON.stringify({
+          type: 'send_media',
+          session: state.activeSession,
+          caption,
+          media: {
+            type: file.type.startsWith('image/') ? 'image' : 'file',
+            data: base64Data,
+            metadata: {
+              name: file.name,
+              size: file.size,
+              mimeType: file.type
+            }
+          }
+        }));
+        resolve();
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  }, [state.activeSession]);
+
   // Send Typing Indicator
   const sendTypingIndicator = useCallback((isTyping: boolean) => {
     if (!state.activeSession || !state.currentUser || !socketRef.current) return;
@@ -268,6 +299,7 @@ export function useChatSDK() {
     loginUser,
     startSession,
     sendMessage,
+    sendMedia,
     sendTypingIndicator,
     getAllUsers,
     findUserByUsername,

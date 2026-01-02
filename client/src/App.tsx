@@ -17,14 +17,11 @@ function App() {
     loginUser,
     startSession,
     sendMessage,
+    sendMedia,
     sendTypingIndicator,
     getAllUsers,
     findUserByUsername,
   } = useChatSDK();
-
-
-
-  console.log(users, 'getAllUsers')
 
   // Load users on mount
   useEffect(() => {
@@ -46,6 +43,10 @@ function App() {
 
   const handleSendMessage = async (text: string) => {
     await sendMessage(text);
+  };
+
+  const handleSendMedia = async (file: File) => {
+    await sendMedia(file);
   };
 
   const handleDecryptMessage = async (message: any) => {
@@ -83,6 +84,7 @@ function App() {
           activeSession={activeSession}
           messages={messages}
           onSendMessage={handleSendMessage}
+          onSendMedia={handleSendMedia}
           onDecryptMessage={handleDecryptMessage}
           onTyping={sendTypingIndicator}
           typingUsers={typingUsers}

@@ -2,14 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 
 interface MessageInputProps {
   onSendMessage: (text: string) => Promise<void>;
+  onSendMedia: (file: File) => Promise<void>;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
 }
 
-export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInputProps) {
+export function MessageInput({ onSendMessage, onSendMedia, onTyping, disabled }: MessageInputProps) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const typingTimeoutRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +26,23 @@ export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInput
       onTyping(false); // Stop typing indicator
     } catch (error) {
       console.error('Failed to send message:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || sending) return;
+
+    setSending(true);
+    try {
+      await onSendMedia(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Failed to send file:', error);
     } finally {
       setSending(false);
     }
@@ -56,6 +75,17 @@ export function MessageInput({ onSendMessage, onTyping, disabled }: MessageInput
 
   return (
     <form onSubmit={handleSubmit} className="message-input">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+        id="file-upload"
+        accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+      />
+      <label htmlFor="file-upload" className="btn-icon">
+        📎
+      </label>
       <input
         type="text"
         value={message}

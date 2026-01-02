@@ -12,7 +12,10 @@ import {
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/chatly';
 console.log(`🔌 Connecting to MongoDB at ${MONGODB_URI}...`);
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('📦 Connected to MongoDB successfully'))
+  .then(() => {
+    console.log('📦 Connected to MongoDB successfully');
+    startServer();
+  })
   .catch(err => {
     console.error('❌ MongoDB connection error:', err.message);
     process.exit(1);
@@ -38,6 +41,7 @@ const messageSchema = new mongoose.Schema({
   groupId: { type: String },
   ciphertext: { type: String, required: true },
   iv: { type: String, required: true },
+  media: { type: Object }, // Added media field to persist encrypted media data/metadata
   type: { type: String, required: true },
   timestamp: { type: Date, required: true }
 });
@@ -108,12 +112,15 @@ const sdk = new ChatSDK({
 
 // --- WebSocket Server ---
 
-const wss = new WebSocketServer({ port: 8080 });
+let wss;
 const clients = new Map();
 
-console.log('🚀 WebSocket server running on ws://localhost:8080');
+async function startServer() {
+  wss = new WebSocketServer({ port: 8080 });
 
-wss.on('connection', async (ws, req) => {
+  console.log('🚀 WebSocket server running on ws://localhost:8080');
+
+  wss.on('connection', async (ws, req) => {
   const url = new URL(req.url, 'ws://localhost:8080');
   const userId = url.searchParams.get('userId');
 
@@ -209,6 +216,48 @@ wss.on('connection', async (ws, req) => {
         return;
       }
 
+      // Sending media
+      if (message.type === 'send_media') {
+        const { session, caption, media } = message;
+        console.log(`🖼️ Sending media from ${userId}: ${media.metadata.name}`);
+        try {
+          const sender = await sdk.getUserById(userId);
+          const recipientId = session.participants.find(p => p.id !== userId)?.id;
+          const recipient = await sdk.getUserById(recipientId);
+
+          if (!sender || !recipient) {
+            throw new Error('Sender or recipient not found');
+          }
+
+          const chatSession = new ChatSession(session.id, sender, recipient);
+          
+          // Encrypt media message manually on server
+          const msg = await chatSession.encryptMedia(caption || '', {
+            type: media.type,
+            data: media.data,
+            metadata: media.metadata
+          }, userId);
+          
+          await sdk.config.messageStore.create(msg);
+          
+          // For client, we send media in plaintext (it's already been decrypted/handled by hook logic)
+          const msgToClient = { ...msg, text: caption, media: { ...msg.media, data: media.data } };
+
+          if (recipientId) {
+            const recipientWs = clients.get(recipientId);
+            if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+              recipientWs.send(JSON.stringify({ type: 'message', message: msgToClient }));
+              ws.send(JSON.stringify({ type: 'delivery', messageId: msg.id, status: 'delivered' }));
+            }
+          }
+          ws.send(JSON.stringify({ type: 'message', message: msgToClient }));
+        } catch (err) {
+          console.error('❌ Media error:', err.message);
+          ws.send(JSON.stringify({ type: 'error', message: err.message }));
+        }
+        return;
+      }
+
       // History
       if (message.type === 'get_history') {
         const { otherUserId } = message;
@@ -230,26 +279,41 @@ wss.on('connection', async (ws, req) => {
           
           // Reconstruct session for decryption
           const sessionId = [userId, otherUserId].sort().join('-');
-          const chatSession = new ChatSession(sessionId, sender, recipient);
+          // Convert Mongoose docs to plain objects for the SDK
+          const senderObj = sender.toObject();
+          const recipientObj = recipient.toObject();
           
-          // Decrypt messages for the client
-          const historyWithText = await Promise.all(history.map(async msg => {
+          const historyWithText = [];
+          
+          // Decrypt messages sequentially for the client to avoid state corruption
+          for (const msg of history) {
             try {
-              // Since we are on the server and have both keys, initialize specifically
+              const chatSession = new ChatSession(sessionId, senderObj, recipientObj);
               await chatSession.initialize(); 
-              const decrypted = await chatSession.decrypt(msg, sender);
-              return {
+
+              if (msg.type === 'media') {
+                const decryptedMedia = await chatSession.decryptMedia(msg, senderObj);
+                historyWithText.push({
+                  ...msg.toObject(),
+                  text: decryptedMedia.text,
+                  media: decryptedMedia.media
+                });
+                continue;
+              }
+
+              const decrypted = await chatSession.decrypt(msg, senderObj);
+              historyWithText.push({
                 ...msg.toObject(),
                 text: decrypted
-              };
+              });
             } catch (err) {
               console.error(`❌ Decryption error for message ${msg.id}:`, err.message);
-              return {
+              historyWithText.push({
                 ...msg.toObject(),
                 text: '[Decryption Error]'
-              };
+              });
             }
-          }));
+          }
           
           ws.send(JSON.stringify({ type: 'history', messages: historyWithText }));
         } catch (err) {
@@ -296,7 +360,8 @@ wss.on('connection', async (ws, req) => {
     await UserModel.findOneAndUpdate({ id: userId }, { status: 'offline', lastSeen: new Date() });
     broadcastUserStatus(userId, 'offline');
   });
-});
+  });
+}
 
 function broadcastUserStatus(userId, status, userData = null) {
   const statusMessage = JSON.stringify({
@@ -319,8 +384,12 @@ process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down server...');
   clients.forEach((ws) => ws.close(1000, 'Server shutting down'));
   await mongoose.connection.close();
-  wss.close(() => {
-    console.log('✅ Server closed');
+  if (wss) {
+    wss.close(() => {
+      console.log('✅ Server closed');
+      process.exit(0);
+    });
+  } else {
     process.exit(0);
-  });
-})
+  }
+});

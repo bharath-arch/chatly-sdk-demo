@@ -81,7 +81,25 @@ function MessageItem({ message, isOwnMessage }: MessageItemProps) {
         {loading ? (
           <span className="message-loading">Decrypting...</span>
         ) : (
-          <p className="message-text">{decryptedText}</p>
+          <div className="message-content">
+            {message.type === 'media' && message.media ? (
+              <div className="media-message">
+                {message.media.type === 'image' ? (
+                  <img src={message.media.data} alt={message.media.metadata?.name} className="chat-image" />
+                ) : (
+                  <div className="file-attachment">
+                    <span>📄 {message.media.metadata?.name}</span>
+                    <a href={message.media.data} download={message.media.metadata?.name} className="btn-download">
+                      Download
+                    </a>
+                  </div>
+                )}
+                {message.text && <p className="media-caption">{message.text}</p>}
+              </div>
+            ) : (
+              <p className="message-text">{decryptedText}</p>
+            )}
+          </div>
         )}
         <div className="message-meta">
           <span className="message-time">{formatTime(message.timestamp)}</span>

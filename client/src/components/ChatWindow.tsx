@@ -7,6 +7,7 @@ interface ChatWindowProps {
   activeSession: any | null;
   messages: Message[];
   onSendMessage: (text: string) => Promise<void>;
+  onSendMedia: (file: File) => Promise<void>;
   onDecryptMessage: (message: Message) => Promise<string>;
   onTyping: (isTyping: boolean) => void;
   typingUsers: Set<string>;
@@ -18,6 +19,7 @@ export function ChatWindow({
   activeSession,
   messages,
   onSendMessage,
+  onSendMedia,
   onDecryptMessage,
   onTyping,
   typingUsers,
@@ -63,6 +65,7 @@ export function ChatWindow({
           />
           <MessageInput
             onSendMessage={onSendMessage}
+            onSendMedia={onSendMedia}
             onTyping={onTyping}
             disabled={false}
           />
