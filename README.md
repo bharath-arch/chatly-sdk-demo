@@ -26,7 +26,7 @@ A production-ready, fully functional real-time chat application built with **cha
 ```bash
 cd server
 npm install
-node index.js
+npm run dev
 ```
 
 The server will start on `ws://localhost:8080`
@@ -56,7 +56,7 @@ The client will be available at `http://localhost:5173`
 
 1. Send several messages between users
 2. Refresh the browser page
-3. Login again - all messages will be restored from LocalStorage
+3. Login again - all messages will be restored from DB
 
 ### Testing Reconnection
 
@@ -88,7 +88,7 @@ chatly-app/
 - **Frontend**: React 18, TypeScript, Vite
 - **Chat SDK**: chatly-sdk@0.0.8-beta
 - **Transport**: WebSocket (ws library)
-- **Storage**: Browser LocalStorage
+- **Storage**: MongoDB
 - **Styling**: Vanilla CSS with modern design
 
 ## 🎨 Features Breakdown
@@ -102,39 +102,6 @@ chatly-app/
 - Delivery confirmation
 
 ### Frontend (React App)
-- Custom `LocalStorageMessageStore` for message persistence
-- `useChatSDK` hook for SDK integration
-- Event-driven architecture with:
-  - `MESSAGE_RECEIVED`
-  - `MESSAGE_SENT`
-  - `CONNECTION_STATE_CHANGED`
-  - Custom typing and status events
-- Premium UI with:
-  - Glassmorphism effects
-  - Gradient accents
-  - Smooth animations
-  - Auto-scroll messages
-  - Responsive design
-
-## 📝 Key SDK Usage
-
-```typescript
-// Initialize SDK with custom stores
-const sdk = new ChatSDK({
-  userStore: new InMemoryUserStore(),
-  messageStore: new LocalStorageMessageStore(), // Custom implementation
-  groupStore: new InMemoryGroupStore(),
-  transport: new WebSocketClient('ws://localhost:8080'),
-});
-
-// Listen for events
-sdk.on(EVENTS.MESSAGE_RECEIVED, (message) => {
-  // Handle incoming message
-});
-
-// Send messages
-await sdk.sendMessage(session, 'Hello!');
-```
 
 ## 🔒 Security
 
